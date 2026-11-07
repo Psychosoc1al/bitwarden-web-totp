@@ -1,0 +1,99 @@
+name: Build and Release Extension (TOTP Unlocked)
+
+on:
+  schedule:
+    # Run every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      force_tag:
+        description: 'Target tag to build (e.g. browser-v2026.10.2). Leave empty for latest browser release.'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  check-and-release:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: unlocked
+
+      - name: Add upstream remote
+        run: git remote add upstream https://github.com/bitwarden/clients.git || true
+
+      - name: Find target upstream browser tag
+        id: get-tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORCE_TAG: ${{ inputs.force_tag }}
+        run: |
+          if [ -n "$FORCE_TAG" ]; then
+            echo "Using forced tag: $FORCE_TAG"
+            TAG="$FORCE_TAG"
+          else
+            TAG=$(gh release list --repo bitwarden/clients --limit 30 --json tagName,isDraft,isPrerelease --jq '[.[] | select(.tagName | startswith("browser-v")) | select(.isDraft == false and .isPrerelease == false)][0].tagName')
+          fi
+
+          if [ -z "$TAG" ] || [ "$TAG" = "null" ]; then
+            echo "ERROR: Could not resolve a browser release tag."
+            exit 1
+          fi
+
+          echo "Target upstream tag is: $TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists on $GITHUB_REPOSITORY. Skipping build."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Release $TAG does not exist yet. Proceeding with build."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout release tag and apply unlock
+        if: steps.get-tag.outputs.skip != 'true'
+        env:
+          TAG: ${{ steps.get-tag.outputs.tag }}
+        run: |
+          git fetch upstream tag "$TAG" --no-tags
+          git checkout "$TAG"
+          git checkout unlocked -- libs/common/src/billing/services/account/billing-account-profile-state.service.ts
+          git diff --stat
+
+      - name: Setup Node.js
+        if: steps.get-tag.outputs.skip != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        if: steps.get-tag.outputs.skip != 'true'
+        run: npm ci
+
+      - name: Build Chrome & Firefox extension packages
+        if: steps.get-tag.outputs.skip != 'true'
+        working-directory: apps/browser
+        run: |
+          npm run dist:chrome
+          npm run dist:firefox
+          ls -lh dist/
+
+      - name: Create GitHub Release
+        if: steps.get-tag.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.get-tag.outputs.tag }}
+        run: |
+          gh release create "$TAG" \
+            apps/browser/dist/dist-chrome.zip \
+            apps/browser/dist/dist-firefox.zip \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Bitwarden Browser Extension $TAG (TOTP Unlocked)" \
+            --notes "Automated build of official Bitwarden browser extension ($TAG) with TOTP and premium features unlocked for free tier accounts."

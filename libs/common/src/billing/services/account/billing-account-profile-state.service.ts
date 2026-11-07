@@ -1,4 +1,4 @@
-import { map, Observable } from "rxjs";
+import { map, Observable, of } from "rxjs";
 
 import { BILLING_DISK, StateProvider, UserKeyDefinition } from "@bitwarden/state";
 
@@ -18,27 +18,15 @@ export class DefaultBillingAccountProfileStateService implements BillingAccountP
   constructor(private readonly stateProvider: StateProvider) {}
 
   hasPremiumFromAnyOrganization$(userId: UserId): Observable<boolean> {
-    return this.stateProvider
-      .getUser(userId, BILLING_ACCOUNT_PROFILE_KEY_DEFINITION)
-      .state$.pipe(map((profile) => !!profile?.hasPremiumFromAnyOrganization));
+    return of(true);
   }
 
   hasPremiumPersonally$(userId: UserId): Observable<boolean> {
-    return this.stateProvider
-      .getUser(userId, BILLING_ACCOUNT_PROFILE_KEY_DEFINITION)
-      .state$.pipe(map((profile) => !!profile?.hasPremiumPersonally));
+    return of(true);
   }
 
   hasPremiumFromAnySource$(userId: UserId): Observable<boolean> {
-    return this.stateProvider
-      .getUser(userId, BILLING_ACCOUNT_PROFILE_KEY_DEFINITION)
-      .state$.pipe(
-        map(
-          (profile) =>
-            profile?.hasPremiumFromAnyOrganization === true ||
-            profile?.hasPremiumPersonally === true,
-        ),
-      );
+    return of(true);
   }
 
   async setHasPremium(
