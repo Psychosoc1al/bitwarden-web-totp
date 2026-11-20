@@ -92,8 +92,8 @@ jobs:
           TAG: ${{ steps.get-tag.outputs.tag }}
         run: |
           gh release create "$TAG" \
-            apps/browser/dist/dist-chrome.zip \
-            apps/browser/dist/dist-firefox.zip \
+            apps/browser/dist/*dist-chrome.zip \
+            apps/browser/dist/*dist-firefox.zip \
             --repo "$GITHUB_REPOSITORY" \
             --title "Bitwarden Browser Extension $TAG (TOTP Unlocked)" \
             --notes "Automated build of official Bitwarden browser extension ($TAG) with TOTP and premium features unlocked for free tier accounts."
